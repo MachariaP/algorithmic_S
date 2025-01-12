@@ -1,0 +1,17 @@
+[Unit]
+Description=String Search Server
+After=network.target
+
+[Service]
+Type=simple
+User=string_search
+Group=string_search
+WorkingDirectory=/opt/string_search
+ExecStart=/opt/string_search/venv/bin/python3 server.py
+Restart=always
+RestartSec=3
+StandardOutput=append:/var/log/string_search/server.log
+StandardError=append:/var/log/string_search/error.log
+
+[Install]
+WantedBy=multi-user.target 

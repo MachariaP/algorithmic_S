@@ -1,0 +1,15 @@
+[Unit]
+Description=String Search Server
+After=network.target
+
+[Service]
+Type=simple
+User=string_search
+Group=string_search
+WorkingDirectory=/opt/string-search
+ExecStart=/opt/string-search/venv/bin/python server.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target 

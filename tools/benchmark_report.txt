@@ -1,0 +1,63 @@
+String Search Server Performance Report
+====================================
+
+
+Exact Matches:
+
+Query: test_string_1
+  Min: 1.21ms
+  Max: 2.18ms
+  Avg: 1.58ms
+  P95: 2.59ms
+
+Query: 7;0;6;28;0;23;5;0;
+  Min: 1.28ms
+  Max: 1.73ms
+  Avg: 1.50ms
+  P95: 1.74ms
+
+Query: special!@#$%^&*()
+  Min: 1.31ms
+  Max: 1.53ms
+  Avg: 1.44ms
+  P95: 1.53ms
+
+Partial Matches:
+
+Query: test
+  Min: 1.38ms
+  Max: 1.82ms
+  Avg: 1.63ms
+  P95: 1.88ms
+
+Query: 7;0;6
+  Min: 1.31ms
+  Max: 1.92ms
+  Avg: 1.56ms
+  P95: 2.14ms
+
+Query: special
+  Min: 1.41ms
+  Max: 1.98ms
+  Avg: 1.65ms
+  P95: 2.13ms
+
+Not Found:
+
+Query: nonexistent_string
+  Min: 1.24ms
+  Max: 1.74ms
+  Avg: 1.53ms
+  P95: 1.79ms
+
+Query: 999;888;777
+  Min: 1.24ms
+  Max: 4.06ms
+  Avg: 2.21ms
+  P95: 5.48ms
+
+Query: !@#$%^&*()
+  Min: 1.60ms
+  Max: 3.44ms
+  Avg: 2.29ms
+  P95: 4.20ms

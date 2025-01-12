@@ -1,0 +1,25 @@
+Load Test Results
+================
+
+Configuration:
+- Clients: 100
+- Requests per client: 100
+- Total requests: 10000
+
+Performance Metrics:
+- Successful requests: 10000
+- Total time: 38.16s
+- Average response time: 21.89ms
+- Median response time: 19.08ms
+- 95th percentile response time: 49.83ms
+- 99th percentile response time: 67.11ms
+- Throughput: 262.04 requests/second
+- Error rate: 0.00%
+- Memory usage: 2.12MB
+
+Resource Usage:
+- Average CPU usage: 17.32%
+- Peak CPU usage: 28.50%
+- Average memory usage: 0.81%
+- Peak memory usage: 0.81%
+- Total network I/O: 11152.00KB
