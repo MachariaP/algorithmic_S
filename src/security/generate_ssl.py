@@ -7,7 +7,7 @@ Generates self-signed SSL certificates for development and testing.
 For production, use certificates from a trusted CA.
 
 Author: Phinehas Macharia
-Date: 2024
+Date: 2025
 """
 
 import os
