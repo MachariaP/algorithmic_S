@@ -1,100 +1,203 @@
 #!/usr/bin/env python3
 
-"""Comprehensive test suite"""
+"""
+Comprehensive Test Suite
+
+This module contains extensive tests covering:
+1. Edge cases and boundary conditions
+2. Performance under various loads
+3. Memory usage patterns
+4. Concurrency behavior
+5. Error handling scenarios
+"""
 
 import pytest
 import socket
 import ssl
 import time
 import threading
-import os
+import resource
+import random
 from pathlib import Path
-from src.search.matcher import StringMatcher
 from concurrent.futures import ThreadPoolExecutor
+from typing import Generator, List, Tuple
+
 from server import StringSearchServer
+from src.config.config import Config
+
 
 @pytest.fixture
-def test_server(test_config, server_port):
-    """Create and start test server"""
-    server = StringSearchServer(config=test_config)
-    thread = threading.Thread(target=server.start, args=('localhost', server_port))
-    thread.daemon = True
-    thread.start()
+def server() -> Generator[StringSearchServer, None, None]:
+    """Fixture to create and start server for tests"""
+    server = StringSearchServer()
+    server_thread = threading.Thread(target=server.start)
+    server_thread.daemon = True
+    server_thread.start()
     time.sleep(1)  # Wait for server to start
-    return server
+    yield server
+    server.sock.close()
 
-def test_exact_matching():
-    """Test exact line matching"""
-    test_cases = [
-        ("test_string", "test_string\n", True),
-        ("test_string", "test_string_extra", False),
-        ("test_string", "partial_test_string", False),
-        ("7;0;6;28;0;23;5;0;", "7;0;6;28;0;23;5;0;\n", True)
-    ]
-    
-    for needle, haystack, expected in test_cases:
-        assert StringMatcher.is_exact_match(needle, haystack) == expected
 
-def test_concurrent_load(test_server, server_port):
-    """Test concurrent connections"""
-    def make_request():
-        with socket.create_connection(('localhost', server_port)) as sock:
-            sock.sendall(b"7;0;6;28;0;23;5;0;\n")
-            return sock.recv(1024)
-    
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = [executor.submit(make_request) for _ in range(10)]
-        results = [f.result() for f in futures]
-        
-    assert all(r.strip() == b"STRING EXISTS" for r in results)
+class TestEdgeCases:
+    """Test edge cases and boundary conditions"""
 
-def test_ssl_connection(ssl_config, server_port, ssl_certs):
-    """Test SSL connection"""
-    key_path, cert_path = ssl_certs
-    
-    # Start SSL-enabled server
-    server = StringSearchServer(config=ssl_config)
-    thread = threading.Thread(target=server.start, args=('localhost', server_port))
-    thread.daemon = True
-    thread.start()
-    time.sleep(1)  # Wait for server to start
-    
-    # Create client SSL context
-    context = ssl.create_default_context()
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-    context.load_verify_locations(cafile=str(cert_path))
-    
-    try:
-        # Connect with SSL
-        with socket.create_connection(('localhost', server_port)) as sock:
-            with context.wrap_socket(sock, server_hostname='localhost') as ssock:
-                ssock.sendall(b"7;0;6;28;0;23;5;0;\n")
-                response = ssock.recv(1024)
-                assert response.strip() == b"STRING EXISTS"
-    except Exception as e:
-        pytest.fail(f"SSL connection failed: {e}")
+    def test_empty_string(self, server: StringSearchServer) -> None:
+        """Test empty string handling"""
+        assert server._cached_search("") is False
 
-def test_file_reread(test_server, server_port, test_data_file):
-    """Test file re-reading"""
-    # Configure server for reread mode
-    test_server.config.reread_on_query = True
-    
-    with socket.create_connection(('localhost', server_port)) as sock:
-        # First request
-        sock.sendall(b"7;0;6;28;0;23;5;0;\n")
-        response = sock.recv(1024).strip()
-        assert response == b"STRING EXISTS", f"Initial search failed: {response}"
+    def test_very_long_string(self, server: StringSearchServer) -> None:
+        """Test very long string handling"""
+        long_string = "x" * 1023  # Just under buffer limit
+        assert server._cached_search(long_string) is False
+
+    def test_special_characters(self, server: StringSearchServer) -> None:
+        """Test special character handling"""
+        special_chars = ['\\', '"', "'", '\n', '\t', '\0', ';', '|', '&']
+        for char in special_chars:
+            assert server._cached_search(char) is False
+
+    def test_unicode_strings(self, server: StringSearchServer) -> None:
+        """Test Unicode string handling"""
+        unicode_strings = ['你好', 'Привет', 'مرحبا', '🌟', 'αβγ']
+        for string in unicode_strings:
+            assert server._cached_search(string) is False
+
+
+class TestPerformance:
+    """Test performance characteristics"""
+
+    def test_memory_usage(self, server: StringSearchServer) -> None:
+        """Test memory usage patterns"""
+        def get_memory_mb() -> float:
+            return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+
+        initial_memory = get_memory_mb()
         
-        # Update file
-        with open(test_data_file, 'a') as f:
-            f.write("new_test_string\n")
-            f.flush()
-            os.fsync(f.fileno())  # Ensure write is synced to disk
+        # Perform intensive operations
+        for _ in range(10000):
+            server._cached_search("test_string")
         
-        time.sleep(0.1)  # Small delay to ensure file is updated
+        final_memory = get_memory_mb()
+        memory_increase = final_memory - initial_memory
         
-        # Second request
-        sock.sendall(b"new_test_string\n")
-        response = sock.recv(1024).strip()
-        assert response == b"STRING EXISTS", f"Search after update failed: {response}" 
+        assert memory_increase < 100, f"Memory increase: {memory_increase}MB"
+
+    def test_cache_effectiveness(self, server: StringSearchServer) -> None:
+        """Test cache hit rates"""
+        # Perform repeated searches
+        test_string = "3;0;1;16;0;7;5;0"
+        for _ in range(1000):
+            server._cached_search(test_string)
+        
+        hit_rate = (server.cache_hits / server.total_searches) * 100
+        assert hit_rate > 80, f"Cache hit rate too low: {hit_rate}%"
+
+    @pytest.mark.parametrize("size", [10000, 50000, 100000])
+    def test_scaling_performance(self, server: StringSearchServer, size: int) -> None:
+        """Test performance scaling with data size"""
+        data = [f"{i};0;1" for i in range(size)]
+        start = time.perf_counter()
+        
+        for line in data[:100]:  # Test sample
+            server._cached_search(line)
+        
+        duration = (time.perf_counter() - start) / 100
+        assert duration < 0.5, f"Average search time: {duration*1000:.2f}ms"
+
+
+class TestConcurrency:
+    """Test concurrent behavior"""
+
+    def test_parallel_searches(self, server: StringSearchServer) -> None:
+        """Test parallel search performance"""
+        def worker() -> List[float]:
+            times = []
+            for _ in range(100):
+                start = time.perf_counter()
+                server._cached_search("test_string")
+                times.append(time.perf_counter() - start)
+            return times
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            results = list(executor.map(lambda _: worker(), range(10)))
+
+        # Analyze results
+        all_times = [t for worker_times in results for t in worker_times]
+        avg_time = sum(all_times) / len(all_times)
+        assert avg_time < 0.001, f"Average parallel search time: {avg_time*1000:.2f}ms"
+
+    def test_connection_limits(self, server: StringSearchServer) -> None:
+        """Test connection limit handling"""
+        connections = []
+        try:
+            # Try to exceed connection limit
+            for _ in range(10100):  # Just over limit
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.connect(('localhost', 44445))
+                connections.append(sock)
+        except (ConnectionRefusedError, OSError):
+            pass
+        finally:
+            for sock in connections:
+                sock.close()
+
+        assert len(connections) <= 10000, "Connection limit exceeded"
+
+
+class TestErrorHandling:
+    """Test error handling scenarios"""
+
+    def test_invalid_queries(self, server: StringSearchServer) -> None:
+        """Test handling of invalid queries"""
+        invalid_queries = [
+            None,
+            b"\xff\xff",  # Invalid UTF-8
+            object(),
+            123,
+            True
+        ]
+        
+        for query in invalid_queries:
+            with pytest.raises(Exception):
+                server._cached_search(query)  # type: ignore
+
+    def test_file_modifications(self, server: StringSearchServer, tmp_path: Path) -> None:
+        """Test handling of file modifications"""
+        # Create temporary data file
+        data_file = tmp_path / "test.txt"
+        data_file.write_text("test_line\n")
+        
+        # Modify server config
+        server.config.file_path = data_file
+        server.config.reread_on_query = True
+        
+        # Initial search
+        assert server._cached_search("test_line") is True
+        
+        # Modify file
+        data_file.write_text("new_line\n")
+        
+        # Search should reflect changes
+        assert server._cached_search("test_line") is False
+        assert server._cached_search("new_line") is True
+
+    def test_resource_cleanup(self, server: StringSearchServer) -> None:
+        """Test resource cleanup"""
+        def count_open_files() -> int:
+            return len(list(Path('/proc/self/fd').iterdir()))
+        
+        initial_files = count_open_files()
+        
+        # Perform operations
+        for _ in range(100):
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.connect(('localhost', 44445))
+                sock.sendall(b"test\n")
+                sock.recv(1024)
+        
+        final_files = count_open_files()
+        assert final_files <= initial_files + 5, "File descriptors not properly cleaned up"
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

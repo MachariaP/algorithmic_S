@@ -1,13 +1,14 @@
 [Unit]
-Description=String Search Server
+Description=High-Performance String Search Server
 After=network.target
 
 [Service]
 Type=simple
-User=string_search
-Group=string_search
-WorkingDirectory=/opt/string-search
-ExecStart=/opt/string-search/venv/bin/python server.py
+User=phines-macharia
+Group=phines-macharia
+WorkingDirectory=/home/phines-macharia/Projects/portf/algorithmic_S
+Environment=PYTHONPATH=/home/phines-macharia/Projects/portf/algorithmic_S
+ExecStart=/usr/bin/python3 server.py
 Restart=always
 RestartSec=3
 

@@ -4,59 +4,108 @@ A high-performance TCP server for exact string matching in large text files, opt
 
 ## Features
 
-- **High Performance**
-  - O(1) lookups using Bloom filters and hash tables
-  - Memory-mapped file access
-  - LRU caching with >80% hit rate
-  - Sub-millisecond response times
-  - Supports 10,000+ concurrent connections
+- O(1) lookups using optimized data structures (Bloom filter + Hash table)
+- Memory-mapped file access for performance
+- LRU caching of search results
+- SSL support with configurable authentication
+- Rate limiting capabilities
+- Comprehensive logging and monitoring
+- Graceful error handling and fallbacks
 
-- **Security**
-  - SSL/TLS encryption support
-  - Rate limiting
-  - Buffer overflow protection
-  - Input validation
+## Performance
 
-- **Monitoring**
-  - Real-time performance metrics
-  - Cache hit rate tracking
-  - Memory usage monitoring
-  - Detailed logging
+- REREAD_ON_QUERY=False: ~0.02ms average search time
+- REREAD_ON_QUERY=True: ~35ms average search time
+- Supports up to 10,000 concurrent connections
+- Memory usage: ~50MB for 250,000 lines
 
-- **Reliability**
-  - Graceful error handling
-  - Automatic fallbacks
-  - Comprehensive test coverage
-  - Memory leak protection
+## Requirements
 
-## Performance Benchmarks
-
-| Configuration | Average Time | Max Time | Memory Usage |
-|--------------|--------------|----------|--------------|
-| REREAD=False | 0.02ms      | 0.5ms    | ~50MB       |
-| REREAD=True  | 35ms        | 40ms     | ~50MB       |
+- Python 3.8+
+- Linux/Unix environment
+- Dependencies listed in requirements.txt
 
 ## Installation
 
-1. Create virtual environment:
+1. Clone the repository:
 ```bash
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
+git clone <repository-url>
+cd string-search-server
 ```
 
-2. Install dependencies:
+2. Create and activate virtual environment:
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+3. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Install as service:
+4. Generate SSL certificates (if using SSL):
 ```bash
-sudo ./scripts/install.sh
+python3 src/ssl/cert_gen.py
+```
+
+5. Configure the server:
+```bash
+cp config/config.ini.example config/config.ini
+# Edit config.ini with your settings
+```
+
+## Running as a Linux Service
+
+1. Copy the service file:
+```bash
+sudo cp string_search.service /etc/systemd/system/
+```
+
+2. Edit the service file to match your installation path:
+```bash
+sudo nano /etc/systemd/system/string_search.service
+```
+
+3. Enable and start the service:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable string_search
+sudo systemctl start string_search
+```
+
+4. Check service status:
+```bash
+sudo systemctl status string_search
+```
+
+## Usage
+
+### Starting the Server
+
+```bash
+# Development mode
+python3 server.py
+
+# Production mode (as service)
+sudo systemctl start string_search
+```
+
+### Client Usage
+
+```python
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    s.connect(('localhost', 44445))
+    s.sendall(b"your_search_string\n")
+    response = s.recv(1024).decode()
+    print(response)
 ```
 
 ## Configuration
 
-Edit `config/config.ini`:
+Key configuration options in `config.ini`:
 
 ```ini
 [DEFAULT]
@@ -64,243 +113,56 @@ Edit `config/config.ini`:
 linuxpath = data/200k.txt
 reread_on_query = false
 
-# Performance
+# Performance settings
 max_workers = 100
 cache_size = 10000
 buffer_size = 1048576
 
-# Security
-ssl_enabled = true
+# Security settings
+ssl_enabled = false
 ssl_cert_path = ssl/server.crt
 ssl_key_path = ssl/server.key
 rate_limit_enabled = true
 requests_per_minute = 1000
-
-# Logging
-log_level = INFO
-log_file = logs/server.log
-```
-
-## SSL Setup
-
-1. Generate self-signed certificate:
-```bash
-./tools/setup_ssl.py
-```
-
-2. Enable SSL in config:
-```ini
-ssl_enabled = true
-```
-
-## Usage
-
-### Start Server
-```bash
-# As service
-sudo systemctl start string-search
-
-# Manual start
-./server.py
-```
-
-### Client Usage
-```bash
-# Basic search
-./client.py
-
-# With SSL
-./client.py --ssl
-
-# Custom host/port
-./client.py --host example.com --port 44445
 ```
 
 ## Testing
 
-Run test suite:
+Run the test suite:
 ```bash
 pytest tests/
 ```
 
-Performance tests:
+Run benchmarks:
 ```bash
-./tools/benchmark.py
+python3 benchmarks/search_algorithms.py
 ```
 
-## Architecture
+## Performance Report
 
-### Core Components
+See [PERFORMANCE.md](docs/PERFORMANCE.md) for detailed benchmarks comparing different search algorithms.
 
-1. **Server (`server.py`)**
-   - Multi-threaded TCP server
-   - Connection handling
-   - Request processing
+## Security
 
-2. **Search Engine**
-   - Bloom filter for quick rejection
-   - Hash table for O(1) lookups
-   - Memory-mapped file access
-   - LRU caching
+- SSL/TLS encryption support
+- Rate limiting per IP
+- Buffer overflow protection
+- Input validation
+- Configurable authentication
 
-3. **Security Layer**
-   - SSL/TLS encryption
-   - Rate limiting
-   - Input validation
+## Monitoring
 
-4. **Monitoring**
-   - Performance metrics
-   - Resource usage
-   - Cache statistics
-
-### Optimization Techniques
-
-1. **Bloom Filter**
-   - 16MB size optimized for 250K entries
-   - False positive rate < 0.1%
-   - Eliminates unnecessary disk reads
-
-2. **Hash Table**
-   - O(1) lookup for existing strings
-   - XXHash for fast hashing
-   - Memory efficient storage
-
-3. **Memory Mapping**
-   - Direct file access
-   - Reduced system calls
-   - Shared memory benefits
-
-4. **LRU Cache**
-   - 10K entry cache
-   - >80% hit rate for common queries
-   - Sub-microsecond cache lookups
-
-## Performance Tuning
-
-### Memory Usage
-
-- Bloom filter: 16MB
-- Hash table: ~2MB per 10K entries
-- Memory map: File size
-- Cache: ~1MB per 1K entries
-
-### Concurrency
-
-- Default: 100 worker threads
-- Maximum: 10,000 concurrent connections
-- Rate limit: 1,000 requests/minute
+The server provides comprehensive logging and monitoring:
+- Request logs with timestamps
+- Performance metrics
+- Error tracking
+- Cache hit rates
+- Resource usage statistics
 
 ## Troubleshooting
 
-### Common Issues
-
-1. **Address in use**
-   ```bash
-   sudo netstat -tulpn | grep 44445
-   sudo kill <pid>
-   ```
-
-2. **Permission denied**
-   ```bash
-   sudo chown string-search:string-search /opt/string-search
-   sudo chmod 755 /opt/string-search
-   ```
-
-3. **SSL errors**
-   ```bash
-   ./tools/setup_ssl.py --force
-   ```
-
-## Contributing
-
-This is a private project. Please do not share or distribute the code.
+See [TROUBLESHOOTING.md](docs/troubleshooting.md) for common issues and solutions.
 
 ## License
 
-Proprietary and confidential. All rights reserved.
-
-## Project Structure
-
-```
-string-search-server/
-├── src/                      # Source code
-│   ├── __init__.py
-│   ├── config/              # Configuration management
-│   │   ├── __init__.py
-│   │   └── config.py       # Configuration handling
-│   ├── search/             # Search implementation
-│   │   ├── __init__.py
-│   │   └── matcher.py      # String matching algorithms
-│   ├── monitoring/         # Performance monitoring
-│   │   ├── __init__.py
-│   │   └── metrics.py      # Metrics collection
-│   ├── rate_limiter/       # Rate limiting
-│   │   ├── __init__.py
-│   │   └── limiter.py      # Rate limiting implementation
-│   ├── ssl/                # SSL handling
-│   │   ├── __init__.py
-│   │   ├── ssl_config.py   # SSL configuration
-│   │   └── cert_gen.py     # Certificate generation
-│   └── utils/              # Utilities
-│       ├── __init__.py
-│       ├── logging.py      # Logging configuration
-│       └── monitoring.py   # Monitoring utilities
-├── tests/                  # Test suite
-│   ├── __init__.py
-│   ├── conftest.py        # Test configuration
-│   ├── test_server.py     # Server tests
-│   ├── test_search.py     # Search tests
-│   └── test_comprehensive.py # Integration tests
-├── tools/                  # Utility scripts
-│   ├── benchmark.py       # Performance benchmarking
-│   ├── setup_ssl.py       # SSL setup utility
-│   └── monitor.py         # Monitoring tool
-├── scripts/               # Installation scripts
-│   ├── install.sh        # Installation script
-│   └── setup_project.py  # Project setup
-├── docs/                 # Documentation
-│   ├── USER_GUIDE.md    # User guide
-│   ├── TECHNICAL_DOCS.md # Technical documentation
-│   └── configuration.md  # Configuration guide
-├── data/                 # Data files
-│   └── README.md        # Data documentation
-├── config/              # Configuration files
-│   └── config.ini      # Main configuration
-├── requirements.txt    # Python dependencies
-├── setup.py           # Package setup
-├── server.py         # Main server script
-├── client.py        # Client implementation
-└── README.md       # Project documentation
-```
-
-## Key Files
-
-### Core Components
-- [server.py](server.py) - Main server implementation
-- [client.py](client.py) - Client implementation
-- [src/search/matcher.py](src/search/matcher.py) - Search algorithms
-- [src/config/config.py](src/config/config.py) - Configuration management
-
-### Configuration
-- [config/config.ini](config/config.ini) - Main configuration file
-- [.env](.env) - Environment variables
-- [docs/configuration.md](docs/configuration.md) - Configuration guide
-
-### Documentation
-- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) - User guide
-- [docs/TECHNICAL_DOCS.md](docs/TECHNICAL_DOCS.md) - Technical documentation
-- [docs/performance.md](docs/performance.md) - Performance analysis
-
-### Testing
-- [tests/test_server.py](tests/test_server.py) - Server tests
-- [tests/test_search.py](tests/test_search.py) - Search algorithm tests
-- [tests/test_comprehensive.py](tests/test_comprehensive.py) - Integration tests
-
-### Tools
-- [tools/benchmark.py](tools/benchmark.py) - Performance benchmarking
-- [tools/setup_ssl.py](tools/setup_ssl.py) - SSL setup utility
-- [tools/monitor.py](tools/monitor.py) - Real-time monitoring
-
-### Installation
-- [scripts/install.sh](scripts/install.sh) - Installation script
-- [string_search.service](string_search.service) - Systemd service file
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

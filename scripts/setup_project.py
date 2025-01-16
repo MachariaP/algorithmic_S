@@ -5,6 +5,7 @@
 import os
 from pathlib import Path
 
+
 def create_directory_structure():
     """Create project directory structure"""
     directories = [
@@ -21,18 +22,19 @@ def create_directory_structure():
         "logs",
         "ssl"
     ]
-    
+
     for directory in directories:
         Path(directory).mkdir(parents=True, exist_ok=True)
         # Create __init__.py for Python packages
         if directory.startswith(("src", "tests")):
             init_file = Path(directory) / "__init__.py"
             init_file.touch()
-            
+
     # Create .gitkeep files
     for directory in ["logs", "ssl", "data"]:
         gitkeep = Path(directory) / ".gitkeep"
         gitkeep.touch()
+
 
 def move_files():
     """Move files to their new locations"""
@@ -55,10 +57,11 @@ def move_files():
         "run_tests.sh": "scripts/",
         "server.log": "logs/"
     }
-    
+
     for source, dest in moves.items():
         if os.path.exists(source):
             os.rename(source, os.path.join(dest, source))
+
 
 def main():
     """Set up project structure"""
@@ -66,5 +69,6 @@ def main():
     move_files()
     print("Project structure setup complete!")
 
+
 if __name__ == "__main__":
-    main() 
+    main()

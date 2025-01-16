@@ -1,1 +1,1 @@
-"""String Search Server core functionality""" 
+"""String Search Server core functionality"""

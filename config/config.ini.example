@@ -1,0 +1,42 @@
+[DEFAULT]
+# File settings
+linuxpath = data/200k.txt
+windowspath = data\200k.txt
+reread_on_query = false
+
+# Performance settings
+max_workers = 100
+cache_size = 10000
+buffer_size = 1048576  # 1MB
+
+# Security settings
+ssl_enabled = false
+ssl_cert_path = ssl/server.crt
+ssl_key_path = ssl/server.key
+rate_limit_enabled = true
+requests_per_minute = 1000
+
+# Network settings
+host = localhost
+port = 44445
+backlog = 5
+
+# Logging settings
+log_level = INFO
+log_file = logs/server.log
+log_format = %(asctime)s [%(levelname)s] %(message)s
+
+# Advanced settings
+bloom_filter_size = 16777216  # 16MB (2^24)
+bloom_error_rate = 0.001  # 0.1% false positive rate
+hash_function = xxhash  # Options: xxhash, murmurhash
+string_encoding = utf-8
+
+# Memory settings
+max_memory_mb = 1024  # Maximum memory usage in MB
+gc_threshold = 0.8  # Trigger GC when memory usage exceeds 80%
+
+# Debug settings
+debug_mode = false
+profile_enabled = false
+trace_enabled = false 

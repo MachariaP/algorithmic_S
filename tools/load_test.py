@@ -48,12 +48,14 @@ TEST_QUERIES = [
 
 console = Console()
 
+
 @dataclass
 class TestResult:
     timestamp: float
     response_time: float
     success: bool
     error: str = ""
+
 
 class LoadTest:
     def __init__(self, host='localhost', port=44445):
@@ -62,16 +64,16 @@ class LoadTest:
         self.results: List[TestResult] = []
         self._lock = threading.Lock()
         self._connection_pool = deque(maxlen=MAX_WORKERS)
-        
+
     def _get_connection(self) -> socket.socket:
         """Get connection from pool or create new one"""
         with self._lock:
             if self._connection_pool:
                 return self._connection_pool.pop()
-                
+
         sock = socket.create_connection((self.host, self.port), timeout=5.0)
         return sock
-        
+
     def _return_connection(self, sock: socket.socket):
         """Return connection to pool"""
         with self._lock:

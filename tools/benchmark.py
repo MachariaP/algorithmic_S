@@ -24,17 +24,19 @@ from typing import List, Set
 
 console = Console()
 
+
 def set_based_search(file_path: Path, query: str) -> bool:
     """Set-based search algorithm"""
     with open(file_path, 'r') as f:
         data = {line.strip() for line in f if line.strip()}
     return query in data
 
+
 def binary_search(file_path: Path, query: str) -> bool:
     """Binary search algorithm"""
     with open(file_path, 'r') as f:
         lines = sorted(line.strip() for line in f if line.strip())
-    
+
     left, right = 0, len(lines) - 1
     while left <= right:
         mid = (left + right) // 2
@@ -46,6 +48,7 @@ def binary_search(file_path: Path, query: str) -> bool:
             right = mid - 1
     return False
 
+
 def regex_search(file_path: Path, query: str) -> bool:
     """Regex-based search"""
     pattern = re.compile(f"^{re.escape(query)}$", re.MULTILINE)
@@ -53,11 +56,13 @@ def regex_search(file_path: Path, query: str) -> bool:
         content = f.read()
     return bool(pattern.search(content))
 
+
 def mmap_search(file_path: Path, query: str) -> bool:
     """Memory-mapped search"""
     with open(file_path, 'rb') as f:
         mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
         return mm.find(query.encode()) != -1
+
 
 def index_search(file_path: Path, query: str) -> bool:
     """Index-based search"""
@@ -71,6 +76,7 @@ def index_search(file_path: Path, query: str) -> bool:
                     index_search.index[line] = i
     return query in index_search.index
 
+
 def generate_test_file(size: int) -> Path:
     """Generate test file of given size"""
     path = Path(f"data/test_{size}.txt")
@@ -78,6 +84,7 @@ def generate_test_file(size: int) -> Path:
         for i in range(size):
             f.write(f"test_line_{i}\n")
     return path
+
 
 def test_algorithms():
     """Test different search algorithms"""
@@ -88,14 +95,14 @@ def test_algorithms():
         'mmap_search': mmap_search,
         'index_search': index_search
     }
-    
+
     sizes = [10000, 50000, 100000, 500000, 1000000]
     results = []
-    
+
     for size in sizes:
         console.print(f"\nTesting with file size: {size}")
         file_path = generate_test_file(size)
-        
+
         for name, algo in algorithms.items():
             console.print(f"Testing {name}...")
             times = []
@@ -104,36 +111,36 @@ def test_algorithms():
                 algo(file_path, "test_line_500")
                 duration = (time.perf_counter() - start) * 1000
                 times.append(duration)
-            
+
             results.append({
                 'algorithm': name,
                 'file_size': size,
                 'avg_time': statistics.mean(times),
                 'std_dev': statistics.stdev(times)
             })
-    
+
     # Create report
     df = pd.DataFrame(results)
-    
+
     # Plot results
     plt.figure(figsize=(12, 8))
     for algo in algorithms:
         data = df[df['algorithm'] == algo]
         plt.plot(data['file_size'], data['avg_time'], label=algo)
-    
+
     plt.xlabel('File Size (lines)')
     plt.ylabel('Average Time (ms)')
     plt.title('Algorithm Performance vs File Size')
     plt.legend()
     plt.savefig('benchmark_results.png')
-    
+
     # Print table
     table = Table(title="Algorithm Performance")
     table.add_column("Algorithm")
     table.add_column("File Size")
     table.add_column("Avg Time (ms)")
     table.add_column("Std Dev (ms)")
-    
+
     for _, row in df.iterrows():
         table.add_row(
             row['algorithm'],
@@ -141,8 +148,9 @@ def test_algorithms():
             f"{row['avg_time']:.2f}",
             f"{row['std_dev']:.2f}"
         )
-    
+
     console.print(table)
 
+
 if __name__ == "__main__":
-    test_algorithms() 
+    test_algorithms()
