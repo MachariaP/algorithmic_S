@@ -353,7 +353,7 @@ class StringSearchServer:
             result = "STRING EXISTS" if exists else "STRING NOT FOUND"
 
             # Calculate hit rate
-            hit_rate = (self.cache_hits / self.total_searches) * 100 if
+            hit_rate = (self.cache_hits / self.total_searches) * 100 if\
             self.total_searches > 0 else 0
 
             icon = "[green]✓[/green]" if exists else "[red]✗[/red]"

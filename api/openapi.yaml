@@ -1,0 +1,174 @@
+openapi: 3.0.0
+info:
+  title: String Search Server API
+  description: High-performance string search server with optimized lookups
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+
+servers:
+  - url: http://localhost:44445
+    description: Development server
+  - url: https://localhost:44445
+    description: Development server (SSL)
+
+paths:
+  /search:
+    post:
+      summary: Search for a string pattern
+      description: Search for an exact string match in the loaded data
+      operationId: searchString
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /metrics:
+    get:
+      summary: Get server metrics
+      description: Retrieve Prometheus metrics
+      responses:
+        '200':
+          description: Metrics in Prometheus format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /health:
+    get:
+      summary: Get server health status
+      description: Check server health and resource usage
+      responses:
+        '200':
+          description: Health check response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+components:
+  schemas:
+    SearchRequest:
+      type: object
+      required:
+        - pattern
+      properties:
+        pattern:
+          type: string
+          description: String pattern to search for
+          example: "test string"
+        options:
+          type: object
+          properties:
+            case_sensitive:
+              type: boolean
+              default: false
+            whole_line:
+              type: boolean
+              default: false
+            regex:
+              type: boolean
+              default: false
+
+    SearchResponse:
+      type: object
+      required:
+        - request_id
+        - results
+        - duration
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        results:
+          type: array
+          items:
+            type: string
+        duration:
+          type: number
+          format: float
+          description: Search duration in milliseconds
+        cache_hit:
+          type: boolean
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+        metrics:
+          type: object
+          properties:
+            cpu_usage:
+              type: number
+            memory_usage:
+              type: number
+            uptime:
+              type: number
+            cache_hit_rate:
+              type: number
+            active_connections:
+              type: integer
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          enum:
+            - INVALID_REQUEST
+            - RATE_LIMIT_EXCEEDED
+            - SERVER_ERROR
+            - INVALID_PATTERN
+        message:
+          type: string
+        details:
+          type: object
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+security:
+  - ApiKeyAuth: [] 
