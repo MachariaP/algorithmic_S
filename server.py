@@ -205,7 +205,7 @@ class StringSearchServer:
                 mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
                 # Pre-allocate set for better performance
                 self.data = set()
-                
+
                 # Process file in chunks for better memory usage
                 current_line = bytearray()
                 for byte in iter(lambda: mm.read(1), b''):
@@ -216,18 +216,20 @@ class StringSearchServer:
                         current_line = bytearray()
                     else:
                         current_line.extend(byte)
-                
+
                 # Don't forget last line if file doesn't end with newline
                 if current_line:
                     line = current_line.decode().strip()
                     if line:
                         self.data.add(line)
-                
+
                 mm.close()
-                
+
             # Log sample entries for debugging
                 sample = list(self.data)[:5]
-                logging.info(f"[green]✓[/green] Loaded {len(self.data):,} lines from {self.config.file_path}")
+                logging.info(f"[green]✓[/green] Loaded {
+                             len(self.data):,} lines from {
+                             self.config.file_path}")
                 logging.info(f"Sample entries: {sample}")
         except Exception as e:
             logging.error(f"[red]✗[/red] Error loading data: {e}")
@@ -270,7 +272,8 @@ class StringSearchServer:
             )
 
         except Exception as e:
-            logging.error(f"[red]✗[/red] Optimization initialization error: {e}")
+            logging.error(f"[red]✗[/red] Optimization\
+                          initialization error: {e}")
             # Fall back to basic functionality
             self.data_bloom = None
             self.data_hash = {}
@@ -299,7 +302,7 @@ class StringSearchServer:
             # Strip query to ensure exact matching
             query = query.strip()
             logging.debug(f"Searching for exact line: '{query}'")
-            
+
             # If optimizations failed, fall back to basic search
             if self.data_bloom is None:
                 # Use set membership for exact matching
@@ -316,9 +319,11 @@ class StringSearchServer:
                 return False
 
             # Hash lookup for exact match
-            exists = hash_val in self.data_hash and self.data_hash[hash_val] == query
+            exists = hash_val in self.data_hash and self.data_hash[
+                    hash_val] == query
             if exists:
-                logging.debug(f"Found exact match: '{self.data_hash[hash_val]}'")
+                logging.debug(f"Found exact match: '{
+                              self.data_hash[hash_val]}'")
             return exists
 
         except Exception as e:
@@ -332,9 +337,11 @@ class StringSearchServer:
         self.total_searches += 1
 
         try:
-            if self.config.rate_limit_enabled and not self._check_rate_limit(client_ip):
+            if self.config.rate_limit_enabled and not self._check_rate_limit(
+                    client_ip):
                 duration = (time.perf_counter() - start) * 1000
-                logging.warning(f"[yellow]⚠[/yellow] Rate limit exceeded for {client_ip}")
+                logging.warning(f"[yellow]⚠[/yellow] Rate limit\
+                        exceeded for {client_ip}")
                 return f"RATE LIMIT EXCEEDED;{duration:.2f}"
 
             # Use cached search
@@ -346,7 +353,8 @@ class StringSearchServer:
             result = "STRING EXISTS" if exists else "STRING NOT FOUND"
 
             # Calculate hit rate
-            hit_rate = (self.cache_hits / self.total_searches) * 100 if self.total_searches > 0 else 0
+            hit_rate = (self.cache_hits / self.total_searches) * 100 if
+            self.total_searches > 0 else 0
 
             icon = "[green]✓[/green]" if exists else "[red]✗[/red]"
             logging.info(
