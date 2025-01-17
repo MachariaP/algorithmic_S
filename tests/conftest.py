@@ -8,17 +8,26 @@ import os
 import socket
 import tempfile
 from pathlib import Path
-from typing import AsyncGenerator, Generator, Optional
+from typing import AsyncGenerator, Generator, Optional, List
+from dataclasses import dataclass, field
 
 import pytest
 import pytest_asyncio
 from _pytest.logging import LogCaptureFixture
 
-from src.config.models import ServerConfig
+from src.config.models import (
+    ServerConfig,
+    LogConfig,
+    MonitoringConfig,
+    SecurityConfig,
+    ResourceConfig,
+    SearchConfig
+)
 from src.monitoring.metrics import MetricsManager
 from src.security.ssl import SSLWrapper
 from src.server import StringSearchServer
 from src.utils.logging import setup_logging
+from src.monitoring.alerts import Alert, AlertNotifier
 
 
 @pytest.fixture(scope="session")
@@ -57,6 +66,22 @@ def ssl_cert(temp_dir: Path) -> Generator[tuple[Path, Path], None, None]:
     key_file = temp_dir / "test.key"
     SSLWrapper.generate_self_signed_cert(cert_file, key_file)
     yield cert_file, key_file
+
+
+@dataclass
+class MockNotifier(AlertNotifier):
+    """Mock alert notifier for testing"""
+    notifications: List[Alert] = field(default_factory=list)
+    
+    def send_alert(self, alert: Alert) -> None:
+        """Record notification"""
+        self.notifications.append(alert)
+
+
+@pytest.fixture
+def mock_notifier() -> MockNotifier:
+    """Create mock notifier"""
+    return MockNotifier()
 
 
 @pytest.fixture
@@ -148,19 +173,6 @@ async def client(
     yield sock
     
     sock.close()
-
-
-@pytest.fixture
-def mock_notifier():
-    """Create mock notifier for testing alerts"""
-    class MockNotifier:
-        def __init__(self):
-            self.notifications = []
-            
-        def send_notification(self, alert):
-            self.notifications.append(alert)
-            
-    return MockNotifier()
 
 
 def pytest_configure(config):

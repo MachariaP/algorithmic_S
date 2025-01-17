@@ -1,5 +1,9 @@
 """Configuration models"""
 
+class ConfigError(Exception):
+    """Configuration error"""
+    pass
+
 from pathlib import Path
 from typing import List, Optional
 
@@ -19,6 +23,9 @@ class LogConfig(BaseModel):
         pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$"
     )
     directory: Path = Field(default=Path("/var/log/search_server"))
+    format: str = Field(
+        default="%(levelname)s %(name)s:%(filename)s:%(lineno)d %(message)s"
+    )
 
 
 class MonitoringConfig(BaseModel):

@@ -1,93 +1,67 @@
 """Health check system"""
 
+import os
+import psutil
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
-from typing import Any, Dict, List, Optional, Protocol
-
-
-class HealthStatus(Enum):
-    """Health check status"""
-    HEALTHY = "healthy"
-    WARNING = "warning"
-    CRITICAL = "critical"
-
+from typing import Dict, List, Optional
 
 @dataclass
+class HealthMetrics:
+    """System health metrics"""
+    cpu_percent: float
+    memory_percent: float
+    disk_usage_percent: float
+    open_files: int
+    thread_count: int
+    timestamp: datetime
+
 class HealthCheck:
-    """Health check data"""
-    name: str
-    status: HealthStatus
-    details: Optional[Dict[str, Any]] = None
-    timestamp: datetime = datetime.utcnow()
-
-
-class HealthChecker(Protocol):
-    """Protocol for health checkers"""
-    def check_health(self) -> HealthCheck:
-        """Perform health check"""
-        ...
-
-
-class HealthManager:
     """Health check manager"""
     
-    def __init__(self):
-        """Initialize health manager"""
-        self.checkers: List[HealthChecker] = []
-        self.checks: List[HealthCheck] = []
-        
-    def add_checker(self, checker: HealthChecker) -> None:
-        """Add health checker"""
-        self.checkers.append(checker)
-        
-    def check_health(self) -> Dict[str, Any]:
-        """Run all health checks"""
-        self.checks = []
-        
-        for checker in self.checkers:
-            check = checker.check_health()
-            self.checks.append(check)
-            
-        return self._build_health_report()
-        
-    def _build_health_report(self) -> Dict[str, Any]:
-        """Build health check report"""
-        # Determine overall status
-        if any(c.status == HealthStatus.CRITICAL for c in self.checks):
-            status = HealthStatus.CRITICAL
-        elif any(c.status == HealthStatus.WARNING for c in self.checks):
-            status = HealthStatus.WARNING
-        else:
-            status = HealthStatus.HEALTHY
-            
-        # Build report
-        return {
-            "status": status.value,
-            "timestamp": datetime.utcnow().isoformat(),
-            "checks": [
-                {
-                    "name": check.name,
-                    "status": check.status.value,
-                    "details": check.details or {},
-                    "timestamp": check.timestamp.isoformat()
-                }
-                for check in self.checks
-            ]
+    def __init__(self, thresholds: Optional[Dict[str, float]] = None):
+        self._thresholds = thresholds or {
+            'cpu_percent': 80.0,
+            'memory_percent': 80.0, 
+            'disk_usage_percent': 80.0,
+            'open_files': 1000,
+            'thread_count': 100
         }
+        self._process = psutil.Process(os.getpid())
+        self._history: List[HealthMetrics] = []
         
-    def get_checks(
-        self,
-        status: Optional[HealthStatus] = None,
-        name: Optional[str] = None
-    ) -> List[HealthCheck]:
-        """Get filtered health checks"""
-        checks = self.checks
+    def check(self) -> HealthMetrics:
+        """Collect current health metrics"""
+        metrics = HealthMetrics(
+            cpu_percent=self._process.cpu_percent(),
+            memory_percent=self._process.memory_percent(),
+            disk_usage_percent=psutil.disk_usage('/').percent,
+            open_files=len(self._process.open_files()),
+            thread_count=self._process.num_threads(),
+            timestamp=datetime.now()
+        )
+        self._history.append(metrics)
+        if len(self._history) > 1000:
+            self._history.pop(0)
+        return metrics
         
-        if status:
-            checks = [c for c in checks if c.status == status]
-            
-        if name:
-            checks = [c for c in checks if c.name == name]
-            
-        return checks 
+    def is_healthy(self) -> bool:
+        """Check if current metrics are within thresholds"""
+        metrics = self.check()
+        return all([
+            metrics.cpu_percent < self._thresholds['cpu_percent'],
+            metrics.memory_percent < self._thresholds['memory_percent'],
+            metrics.disk_usage_percent < self._thresholds['disk_usage_percent'],
+            metrics.open_files < self._thresholds['open_files'],
+            metrics.thread_count < self._thresholds['thread_count']
+        ])
+        
+    def get_history(self) -> List[HealthMetrics]:
+        """Get historical health metrics"""
+        return self._history.copy()
+        
+    def set_threshold(self, metric: str, value: float) -> None:
+        """Update threshold for a metric"""
+        if metric not in self._thresholds:
+            raise ValueError(f"Invalid metric: {metric}")
+        self._thresholds[metric] = value 

@@ -1,22 +1,24 @@
-"""String search server implementation"""
+"""Server implementation"""
 
+import os
 import socket
-import threading
-import json
-import time
-import resource
 import logging
-import struct
-import psutil
-from typing import Optional, List, Dict, Any, Set, Tuple
-from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
-from collections import defaultdict
-from dataclasses import asdict
+import resource
+import threading
+from typing import Dict, List, Optional, Set, Tuple
 
+from .config import ServerConfig
 from .search import SearchEngine, SearchOptions, SearchResult
-from .config import ServerConfig, ConfigError
-from .monitoring.server import ServerPerformanceMonitor, ServerHealthCheck, ServerAlertManager
+from .monitoring import (
+    ServerPerformanceMonitor,
+    ServerHealthCheck,
+    ServerAlertManager,
+    Alert,
+    AlertLevel
+)
+from .security import SecurityManager
+from .rate_limiter import RateLimiter
+from .connection_pool import ConnectionPool
 
 
 class ServerError(Exception):
@@ -87,14 +89,14 @@ class StringSearchServer:
         self._clients: List[socket.socket] = []
         self.start_time = time.time()
         self._thread_pool = ThreadPoolExecutor(
-            max_workers=self.config.workers,
+            max_workers=self.config.resources.worker_threads,
             thread_name_prefix="search_worker"
         )
         self._rate_limiter = RateLimiter(
-            self.config.rate_limit_per_ip,
-            self.config.rate_limit_burst
+            self.config.security.rate_limit,
+            self.config.security.rate_limit_burst
         )
-        self._connection_pool = ConnectionPool(self.config.connection_pool_size)
+        self._connection_pool = ConnectionPool(self.config.resources.connection_pool_size)
         
         # Monitoring metrics
         self.request_count = 0
@@ -105,8 +107,8 @@ class StringSearchServer:
         
         # Configure logging
         logging.basicConfig(
-            level=logging.INFO,
-            format='%(levelname)s %(name)s:%(filename)s:%(lineno)d %(message)s'
+            level=getattr(logging, self.config.log.level.upper()),
+            format=self.config.log.format
         )
         self.logger = logging.getLogger(__name__)
         
@@ -123,7 +125,7 @@ class StringSearchServer:
         try:
             resource.setrlimit(
                 resource.RLIMIT_NOFILE,
-                (self.config.max_file_descriptors, self.config.max_file_descriptors)
+                (self.config.resources.max_file_descriptors, self.config.resources.max_file_descriptors)
             )
         except Exception as e:
             self.logger.warning(f"Failed to set resource limits: {e}")
@@ -140,7 +142,7 @@ class StringSearchServer:
         
         try:
             self.sock.bind((self.config.host, self.config.port))
-            self.sock.listen(self.config.max_connections)
+            self.sock.listen(self.config.resources.max_connections)
             self._running.set()
             self.start_time = time.time()
             
@@ -156,16 +158,18 @@ class StringSearchServer:
             threading.Thread(target=self._monitor_resources, daemon=True).start()
             
             # Log server start
-            self.alerts.alert(
-                "server_start",
-                f"Server started on {self.config.host}:{self.config.port}",
-                "info"
+            self.alerts.send_alert(
+                Alert(
+                    level=AlertLevel.INFO,
+                    source="server",
+                    message=f"Server started on {self.config.host}:{self.config.port}"
+                )
             )
             
             while self._running.is_set():
                 try:
                     client_sock, addr = self.sock.accept()
-                    client_sock.settimeout(self.config.connection_timeout)
+                    client_sock.settimeout(self.config.resources.connection_timeout)
                     
                     if not self._connection_pool.add(client_sock):
                         self.logger.warning(f"Connection pool full, rejecting {addr}")
@@ -179,18 +183,22 @@ class StringSearchServer:
                 except socket.error as e:
                     if self._running.is_set():
                         self.logger.error(f"Error accepting connection: {e}")
-                        self.alerts.alert(
-                            "connection_error",
-                            f"Error accepting connection: {str(e)}",
-                            "error"
+                        self.alerts.send_alert(
+                            Alert(
+                                level=AlertLevel.ERROR,
+                                source="server",
+                                message=f"Error accepting connection: {str(e)}"
+                            )
                         )
                     break
         except Exception as e:
             self.logger.error(f"Error starting server: {e}")
-            self.alerts.alert(
-                "server_error",
-                f"Server error: {str(e)}",
-                "error"
+            self.alerts.send_alert(
+                Alert(
+                    level=AlertLevel.ERROR,
+                    source="server",
+                    message=f"Server error: {str(e)}"
+                )
             )
             raise ServerError(f"Failed to start server: {str(e)}")
         finally:
@@ -201,10 +209,12 @@ class StringSearchServer:
         self._running.clear()
         
         # Log server stop
-        self.alerts.alert(
-            "server_stop",
-            "Server stopped",
-            "info"
+        self.alerts.send_alert(
+            Alert(
+                level=AlertLevel.INFO,
+                source="server",
+                message="Server stopped"
+            )
         )
         
         # Clean up connection pool
@@ -233,8 +243,8 @@ class StringSearchServer:
             
     def load_data(self, file_path: Optional[Path] = None) -> None:
         """Load search data from file"""
-        if file_path is None and hasattr(self.config, 'file_path'):
-            file_path = self.config.file_path
+        if file_path is None:
+            file_path = self.config.data_file
         if file_path:
             try:
                 self.search_engine.load_data(file_path)
@@ -244,9 +254,9 @@ class StringSearchServer:
     def get_metrics(self) -> Dict[str, Any]:
         """Get server metrics"""
         return {
-            'uptime': time.time() - self._start_time,
+            'uptime': time.time() - self.start_time,
             'active_connections': len(self._clients),
-            'search_metrics': self.search_engine.benchmark.measure_throughput(1).dict()
+            'search_metrics': self.search_engine.get_metrics()
         }
 
     def _send_response(self, sock: socket.socket, data: Dict[str, Any]) -> None:
@@ -458,44 +468,38 @@ class StringSearchServer:
             
             # Record error metrics
             self.monitor.record_metric("search_errors", 1)
-            self.alerts.alert(
-                "search_error",
-                f"Search error for query '{query[:100]}...': {str(e)}",
-                "error"
+            self.alerts.send_alert(
+                Alert(
+                    "search_error",
+                    f"Search error for query '{query[:100]}...': {str(e)}",
+                    "error"
+                )
             )
             self._send_error(client_sock, str(e))
 
-    def _monitor_resources(self):
+    def _monitor_resources(self) -> None:
         """Monitor system resources"""
         while self._running.is_set():
             try:
-                process = psutil.Process()
-                
-                # Record metrics
-                self.monitor.record_metric(
-                    "memory_usage",
-                    process.memory_percent()
-                )
-                self.monitor.record_metric(
-                    "cpu_usage",
-                    process.cpu_percent()
-                )
-                
-                # Check health and trigger alerts if needed
+                # Check health
                 health = self.health.check_health()
-                if health["status"] != "healthy":
-                    for detail in health["details"]:
-                        self.alerts.alert(
-                            f"health_check_failed",
-                            f"Health check failed: {detail}",
-                            "warning"
+                if not health.healthy:
+                    for issue in health.details.get("system", {}).get("issues", []):
+                        self.alerts.send_alert(
+                            Alert(
+                                level=AlertLevel.WARNING,
+                                source="health_check",
+                                message=f"Health check failed: {issue}"
+                            )
                         )
                 
                 time.sleep(self.config.monitoring_interval)
                 
             except Exception as e:
-                self.alerts.alert(
-                    "monitoring_error",
-                    f"Error monitoring resources: {str(e)}",
-                    "error"
+                self.alerts.send_alert(
+                    Alert(
+                        level=AlertLevel.ERROR,
+                        source="monitoring",
+                        message=f"Error monitoring resources: {str(e)}"
+                    )
                 )
